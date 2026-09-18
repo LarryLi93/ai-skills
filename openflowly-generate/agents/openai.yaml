@@ -1,6 +1,0 @@
-interface:
-  display_name: "Openflowly Generate"
-  short_description: "Batch generate images and videos with Openflowly"
-  default_prompt: "Use $openflowly-generate to batch-generate images or videos from my prompts."
-policy:
-  allow_implicit_invocation: true
