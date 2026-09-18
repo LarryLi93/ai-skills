@@ -15,6 +15,7 @@ DEFAULT_BASE = "https://www.openflowly.com/v1"
 DEFAULT_UPLOAD_BASE = "https://www.openflowly.com/v1"
 QUALITY_CHOICES = ("low", "medium", "high")
 DEFAULT_IMAGE_QUALITY = "low"
+TRANSPARENT_BACKGROUND_MODEL = "gpt image 2.5"
 DEFAULTS = {"image": {"model": "Gpt Image 2.5", "resolution": "1K", "quality": DEFAULT_IMAGE_QUALITY},
             "video": {"model": "Seedance 2 Mini", "resolution": "480p"}}
 
@@ -243,6 +244,8 @@ def prepare_reference_fields(kind, args, model_config):
 def submit_generation(kind, args, prompt, index):
     options = DEFAULTS[kind].copy(); options.update({k: v for k, v in vars(args).items() if v is not None and k in ("model", "resolution", "quality", "size", "aspect_ratio", "duration")})
     model_config = getattr(args, "model_config", {})
+    if getattr(args, "transparent_background", False) and kind != "image":
+        raise ValueError("--transparent-background is only supported for image generation")
     if kind == "image":
         # Keep low as the enforced default; only an explicit CLI value overrides it.
         options["quality"] = args.quality if args.quality is not None else DEFAULT_IMAGE_QUALITY
@@ -253,6 +256,11 @@ def submit_generation(kind, args, prompt, index):
         options.pop("quality", None)
     elif args.quality is not None: raise ValueError("--quality is only supported for image generation")
     body = {"model": options.pop("model"), "prompt": prompt, "n": args.count if kind == "image" else 1, **options}
+    if getattr(args, "transparent_background", False):
+        identifiers = {str(model_config.get(key, "")).strip().casefold() for key in ("model_name", "model", "id") if model_config.get(key)}
+        if TRANSPARENT_BACKGROUND_MODEL not in identifiers:
+            raise ValueError("Transparent background is only supported by Gpt Image 2.5")
+        body["background"] = "transparent"
     body.update(getattr(args, "reference_fields", {}))
     if kind == "video" and body.get("duration") is None: body.pop("duration", None)
     endpoint = f"{args.base_url.rstrip('/')}/{'images' if kind == 'image' else 'videos'}/generations"
@@ -297,6 +305,7 @@ def main():
     u = sub.add_parser("refresh-config", aliases=("update-models",), help="Fetch and cache the latest enabled model config"); u.set_defaults(func=run_refresh_config)
     m = sub.add_parser("models", help="List enabled models from the local cache"); m.add_argument("--refresh", action="store_true", help="Refresh the cache before listing"); m.set_defaults(func=list_models)
     g = sub.add_parser("generate"); g.add_argument("kind", choices=("image", "video")); g.add_argument("--prompt", action="append"); g.add_argument("--input-jsonl"); g.add_argument("--model"); g.add_argument("--resolution"); g.add_argument("--quality", type=normalize_quality, choices=QUALITY_CHOICES, help="Image quality (case-insensitive)"); g.add_argument("--size"); g.add_argument("--aspect-ratio", dest="aspect_ratio"); g.add_argument("--duration", type=int); g.add_argument("--count", type=int, default=1); g.add_argument("--output-dir", default=None, help="Fresh output directory for downloaded results")
+    g.add_argument("--transparent-background", action="store_true", help="Generate an RGBA PNG with a transparent background (Gpt Image 2.5 images only)")
     g.add_argument("--reference-image", action="append", help="Legacy local subject image for image models; repeatable")
     g.add_argument("--reference-url", action="append", help="Legacy subject image URL for image models; repeatable")
     g.add_argument("--subject-reference-image", action="append", help="Local subject reference image; repeatable")

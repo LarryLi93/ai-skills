@@ -25,6 +25,7 @@ Openflowly 图片/视频生成助手
 - 查询当前可用的生成模型
 - 更新本地缓存的模型配置
 - 按指定的画面比例生成，例如 16:9、9:16、1:1
+- 使用 Gpt Image 2.5 生成透明背景 PNG（RGBA）
 - 为视频设置时长和清晰度
 
 默认设置：
@@ -70,7 +71,11 @@ Unless the user selects another model, use:
 
 When the user does not explicitly specify image quality, use `quality=low` in the generation request. Do not infer `medium` or `high` from words such as "高质量", "精致", "电影感", or "高清". Only an explicit quality request such as `low`, `medium`, or `high` may override this rule. Keep the script's `DEFAULTS["image"]["quality"]` value as `low`.
 
-Preserve user-specified model, resolution, quality, aspect ratio, duration, reference images, and count. For image generation, pass `--quality low`, `--quality medium`, or `--quality high`; the client accepts these values case-insensitively and always sends lowercase API values. Ask only for information that is required to construct the request, such as a missing prompt or an unavailable reference-image URL.
+Preserve user-specified model, resolution, quality, aspect ratio, duration, reference images, transparent-background preference, and count. For image generation, pass `--quality low`, `--quality medium`, or `--quality high`; the client accepts these values case-insensitively and always sends lowercase API values. Ask only for information that is required to construct the request, such as a missing prompt or an unavailable reference-image URL.
+
+### Transparent background
+
+When the user asks for 透明背景、抠图、无背景、PNG 贴纸、alpha background, or transparent background, use image generation and pass `--transparent-background`. The client sends the top-level JSON field `"background": "transparent"`. This option is supported only by `Gpt Image 2.5`; the script must reject it for video and for every other image model instead of silently ignoring it. The successful output should be a PNG with an alpha channel (RGBA). Do not add this field unless the user explicitly asks for a transparent background.
 
 ## Model config cache
 
@@ -120,7 +125,7 @@ When first/end-frame mode is active, follow the selected first/end-frame config 
 
 ## Generation workflow
 
-1. Normalize the request into `image` or `video`, one or more prompts, count, model, provider-supported options, and any reference media. Load the local model-config cache, resolve the selected model by `model_name`, provider model ID, or model ID, and route references according to the two model configuration fields above. The script uploads local reference files through `/v1/upload/` only after validation.
+1. Normalize the request into `image` or `video`, one or more prompts, count, model, provider-supported options, transparent-background preference, and any reference media. Load the local model-config cache, resolve the selected model by `model_name`, provider model ID, or model ID, and route references according to the two model configuration fields above. The script uploads local reference files through `/v1/upload/` only after validation.
 2. Run `scripts/openflowly_generate.py generate ...`. Use repeated `--prompt` for a small batch or `--input-jsonl` for a larger batch. The script submits each item to `/v1/images/generations` or `/v1/videos/generations`.
 3. Extract the asynchronous task ID from common OpenAI/provider response shapes. If the response already contains a media URL, return it without polling. Do not add or require a CLI `include_media_data` parameter.
 4. For each task, wait 10 seconds between checks and poll `/v1/tasks/{task_id}` at most 20 times. Include `X-Model-Name` on every poll. Treat `completed`, `succeeded`, `success`, `done`, `finish`, and `finished` as success; treat `failed`, `error`, `fail`, `cancelled`, `canceled`, and `timeout` as failure. When polling reaches `poll_timeout`, or polling/downloading raises `poll_error`, treat the item as a terminal failed result and continue processing the remaining prompts.
@@ -138,6 +143,12 @@ python3 scripts/openflowly_generate.py generate image \
   --prompt 'A cinematic product photo of a silver teapot on black stone' \
   --quality low \
   --count 3
+
+python3 scripts/openflowly_generate.py generate image \
+  --model 'Gpt Image 2.5' \
+  --prompt 'A red apple sticker with soft natural shading' \
+  --quality low \
+  --transparent-background
 
 python3 scripts/openflowly_generate.py generate video \
   --prompt 'A slow camera move through a neon-lit rainy alley' \
