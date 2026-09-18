@@ -1,0 +1,6 @@
+interface:
+  display_name: "Openflowly Coding"
+  short_description: "AI product workflow: research, IA, roadmap, UI, build"
+  default_prompt: "Use $openflowly-coding to research a market, define product IA, plan a roadmap, design UI, or research and build a feature."
+policy:
+  allow_implicit_invocation: true
